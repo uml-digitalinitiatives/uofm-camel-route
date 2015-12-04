@@ -7,7 +7,12 @@ import java.util.Date;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.builder.RouteBuilder;
 
-
+/**
+ * Create a fake update message to force a reindexing of a Fedora object.
+ *
+ * @author whikloj
+ * @since 2015-07-10
+ */
 public class JMSCreator extends RouteBuilder {
 
     final String template_msg =
@@ -33,15 +38,17 @@ public class JMSCreator extends RouteBuilder {
         rest("/reindex/")
         .get("/{pid}")
         .description("Takes a PID and passes a JMS message to Gsearch")
-        .to("direct:to_jms");
+        .to("seda:to_jms");
 
         // Re-indexing route
-        from("direct:to_jms")
-                .setExchangePattern(ExchangePattern.InOnly)
-                .setProperty("date", constant(getDate()))
+        from("seda:to_jms").routeId("JMS Re-indexer")
+        .setExchangePattern(ExchangePattern.InOnly)
+        .setProperty("date", constant(getDate()))
+        .setProperty("pid", simple("${in.header.pid}"))
         .setBody(simple(template_msg))
-                .log("Sending JMS message to queue for PID ${in.header.pid}")
+        .log("Sending JMS message to queue for PID ${in.header.pid}")
         .removeHeaders("*")
+        .setHeader("pid", simple("${property.pid}"))
         .to("{{output.stream}}?jmsMessageType=Text&transferException=true");
     }
 
